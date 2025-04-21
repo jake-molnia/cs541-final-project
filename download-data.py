@@ -29,7 +29,6 @@ def setup_kaggle_credentials():
     print("Kaggle credentials set up successfully.")
 
 def download_enron_dataset(output_dir="data"):
-    import kaggle
     """
     Download the Enron email dataset from Kaggle
 
@@ -39,6 +38,7 @@ def download_enron_dataset(output_dir="data"):
     Returns:
         str: Path to the CSV file
     """
+    import kaggle
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     print(f"Downloading Enron email dataset to {output_dir}...")
