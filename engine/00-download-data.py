@@ -2,12 +2,6 @@ import os
 import sys
 import numpy as np
 import pandas as pd
-import email
-import pickle
-import json
-import zipfile
-from email.parser import Parser
-from collections import defaultdict
 
 def setup_kaggle_credentials():
     """
@@ -28,15 +22,17 @@ def setup_kaggle_credentials():
         os.environ['KAGGLE_KEY'] = kaggle_key
     print("Kaggle credentials set up successfully.")
 
-def download_enron_dataset(output_dir="data"):
+def download_datasets(output_dir="data", enron_filename="enron_emails.csv", spam_filename="spam_emails.csv"):
     """
-    Download the Enron email dataset from Kaggle
+    Download the Enron email dataset and Spam email dataset from Kaggle
 
     Args:
-        output_dir (str): Directory to save the dataset
+        output_dir (str): Directory to save the datasets
+        enron_filename (str): Desired filename for the Enron dataset
+        spam_filename (str): Desired filename for the Spam dataset
 
     Returns:
-        str: Path to the CSV file
+        tuple: Paths to the downloaded CSV files
     """
     import kaggle
     if not os.path.exists(output_dir):
@@ -50,14 +46,19 @@ def download_enron_dataset(output_dir="data"):
             path=output_dir,
             unzip=True
         )
+        os.rename(os.path.join(output_dir, "emails.csv"), os.path.join(output_dir, enron_filename))
+        kaggle.api.dataset_download_files(
+            "jackksoncsie/spam-email-dataset",
+            path=output_dir,
+            unzip=True
+        )
+        os.rename(os.path.join(output_dir, "emails.csv"), os.path.join(output_dir, spam_filename))
         print("Download complete!")
-        return os.path.join(output_dir, "emails.csv")
-
     except Exception as e:
         print(f"Error downloading dataset: {e}")
         sys.exit(1)
 
-def load_enron_emails_from_csv(csv_path):
+def load_emails_from_csv(csv_path):
     """
     Load Enron emails from the downloaded CSV file
 
@@ -80,13 +81,23 @@ def main():
 
     setup_kaggle_credentials()
     data_dir = os.path.join(os.getcwd(), "data")
+    spam_csv_path = os.path.join(data_dir, "spam_emails.csv")
+    enron_csv_path = os.path.join(data_dir, "enron_emails.csv")
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
-    csv_path = download_enron_dataset(data_dir)
-    emails_df = load_enron_emails_from_csv(csv_path)
-    pickle_path = os.path.join(data_dir, "enron_emails_df.pkl")
-    emails_df.to_pickle(pickle_path)
-    print(f"Raw emails saved to {pickle_path}")
+    download_datasets(data_dir, "enron_emails.csv", "spam_emails.csv")
+
+    # Load and save Enron dataset
+    enron_emails_df = load_emails_from_csv(enron_csv_path)
+    enron_pickle_path = os.path.join(data_dir, "enron_emails_df.pkl")
+    enron_emails_df.to_pickle(enron_pickle_path)
+    print(f"Enron emails saved to {enron_pickle_path}")
+
+    # Load and save Spam dataset
+    spam_emails_df = load_emails_from_csv(spam_csv_path)
+    spam_pickle_path = os.path.join(data_dir, "spam_emails_df.pkl")
+    spam_emails_df.to_pickle(spam_pickle_path)
+    print(f"Spam emails saved to {spam_pickle_path}")
 
 if __name__ == "__main__":
     main()

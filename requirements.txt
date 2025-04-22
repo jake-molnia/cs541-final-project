@@ -12,4 +12,5 @@ seaborn>=0.12.0
 plotly>=5.15.0
 pyyaml>=6.0.0
 requests>=2.30.0
-kaggle
+kaggle>=1.7.4
+tensorflow==2.19.0
