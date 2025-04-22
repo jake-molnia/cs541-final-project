@@ -17,6 +17,27 @@ install:
 
     echo "Setup complete! Activate with: source .venv/bin/activate"
 
+download:
+    #!/usr/bin/env bash
+
+    if [ ! -d ".venv" ]; then
+        echo "Virtual environment not found. Run 'just install' first."
+        exit 1
+    fi
+
+    uv run ./engine/00-download-data.py
+
+clean-data:
+    #!/usr/bin/env bash
+
+    if [ ! -d ".venv" ]; then
+        echo "Virtual environment not found. Run 'just install' first."
+        exit 1
+    fi
+
+    uv run ./engine/00-process-data.py
+
+
 clean:
     rm -rf .venv
 
