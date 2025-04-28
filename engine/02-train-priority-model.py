@@ -2,7 +2,6 @@ import os
 import numpy as np
 import pandas as pd
 import pickle
-from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, confusion_matrix
 import matplotlib.pyplot as plt
@@ -10,56 +9,69 @@ import seaborn as sns
 
 def load_feature_data(data_dir):
     """Load the feature data created in the previous step"""
-    X_features = np.load(os.path.join(data_dir, 'X_features.npy'), allow_pickle=True)
-    y_priority = np.load(os.path.join(data_dir, 'y_priority.npy'), allow_pickle=True)
+    # Load train data
+    X_train = np.load(os.path.join(data_dir, 'X_train_features.npy'), allow_pickle=True)
+    y_train = np.load(os.path.join(data_dir, 'y_train_priority.npy'), allow_pickle=True)
+    
+    # Load test data
+    X_test = np.load(os.path.join(data_dir, 'X_test_features.npy'), allow_pickle=True)
+    y_test = np.load(os.path.join(data_dir, 'y_test_priority.npy'), allow_pickle=True)
+    
+    # Load feature names
+    with open(os.path.join(data_dir, 'feature_names.pickle'), 'rb') as f:
+        feature_names = pickle.load(f)
+    
+    # Also load the full dataframe for reference
     feature_df = pd.read_csv(os.path.join(data_dir, 'email_features.csv'))
     
-    return X_features, y_priority, feature_df
-
-def split_feature_data(X_features, y_priority, test_size=0.2, random_state=42):
-    """Split the feature data into training and test sets"""
-    X_train, X_test, y_train, y_test = train_test_split(
-        X_features, y_priority, test_size=test_size, 
-        random_state=random_state, stratify=y_priority
-    )
+    print(f"Loaded train features: {X_train.shape}")
+    print(f"Loaded test features: {X_test.shape}")
     
-    return X_train, X_test, y_train, y_test
+    return X_train, X_test, y_train, y_test, feature_names, feature_df
 
 def train_priority_model(X_train, y_train):
-    """Train a model to predict email priority"""
-    # Random Forest often works well for this type of classification
+    """Train a model to predict email priority with cross-validation"""
+    from sklearn.model_selection import cross_val_score
+    from sklearn.metrics import make_scorer, f1_score
+    
+    # Random Forest with more conservative parameters
     model = RandomForestClassifier(
         n_estimators=100,
-        max_depth=10,
-        min_samples_split=10,
+        max_depth=8,
+        min_samples_split=15,
+        class_weight='balanced',  # Handle class imbalance
         random_state=42
     )
     
-    # If you have time for hyperparameter tuning:
-    '''
-    param_grid = {
-        'n_estimators': [50, 100, 200],
-        'max_depth': [None, 10, 20],
-        'min_samples_split': [2, 5, 10]
-    }
+    # Perform cross-validation to check model performance
+    f1_scorer = make_scorer(f1_score, average='weighted')
+    cv_scores = cross_val_score(model, X_train, y_train, cv=5, scoring=f1_scorer)
     
-    model = GridSearchCV(
-        RandomForestClassifier(random_state=42),
-        param_grid,
-        cv=5,
-        n_jobs=-1,
-        verbose=1
-    )
-    '''
+    print(f"Cross-validation F1 scores: {cv_scores}")
+    print(f"Mean CV F1 score: {cv_scores.mean():.4f}")
     
+    # Train the final model
     print("Training priority model...")
     model.fit(X_train, y_train)
     
     return model
 
 def evaluate_model(model, X_test, y_test):
-    """Evaluate the trained model"""
+    """Evaluate the trained model with more detailed metrics"""
+    from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
+    
     y_pred = model.predict(X_test)
+    
+    # Probability predictions (for ROC curves)
+    if hasattr(model, 'predict_proba'):
+        y_prob = model.predict_proba(X_test)
+        
+        # Calculate ROC AUC for multiclass
+        try:
+            roc_auc = roc_auc_score(y_test, y_prob, multi_class='ovr')
+            print(f"ROC AUC: {roc_auc:.4f}")
+        except:
+            print("Could not calculate ROC AUC")
     
     print("\nModel Evaluation:")
     print("Priority Classification Report:")
@@ -75,7 +87,11 @@ def evaluate_model(model, X_test, y_test):
     plt.xlabel('Predicted')
     plt.ylabel('True')
     plt.title('Confusion Matrix')
-    plt.savefig('data/confusion_matrix.png')
+    plt.savefig('confusion_matrix.png')
+    
+    # Analyze misclassifications
+    misclassified = X_test[y_test != y_pred]
+    print(f"Number of misclassified samples: {len(misclassified)}")
     
     return y_pred
 
@@ -110,18 +126,9 @@ def main():
     """Main function to train the priority model"""
     data_dir = "data"
     
-    # Load feature data
-    X_features, y_priority, feature_df = load_feature_data(data_dir)
-    
-    # Get feature names for importance analysis
-    feature_names = [
-        'sentiment_neg', 'sentiment_neu', 'sentiment_pos', 'sentiment_compound',
-        'subject_sentiment', 'urgent_subject', 'urgent_content',
-        'exclamation_count', 'question_count', 'caps_word_count', 'time_indicator_count'
-    ]
-    
-    # Split data
-    X_train, X_test, y_train, y_test = split_feature_data(X_features, y_priority)
+    # Load feature data with pre-defined splits
+    print("Loading feature data...")
+    X_train, X_test, y_train, y_test, feature_names, feature_df = load_feature_data(data_dir)
     
     # Train model
     model = train_priority_model(X_train, y_train)

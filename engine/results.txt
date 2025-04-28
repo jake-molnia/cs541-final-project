@@ -1,0 +1,61 @@
+Loading original datasets...
+Creating email dataframe...
+Extracting sentiment features...
+Extracting urgency features...
+Creating priority labels...
+Priority distribution: priority
+1    236336
+0    227047
+2     59746
+Name: count, dtype: int64
+Priority distribution by spam label:
+priority         0         1        2
+is_spam
+False     221319.0  236336.0  59746.0
+True        5728.0       NaN      NaN
+Splitting and saving feature data...
+Total samples: 523129
+Train features shape: (418503, 14)
+Test features shape: (104626, 14)
+Train priority distribution: [181637 189069  47797]
+Test priority distribution: [45410 47267 11949]
+Feature extraction complete!
+
+Loading feature data...
+Loaded train features: (418503, 14)
+Loaded test features: (104626, 14)
+Cross-validation F1 scores: [0.74492684 0.74651365 0.74654858 0.74617603 0.7479524 ]
+Mean CV F1 score: 0.7464
+Training priority model...
+ROC AUC: 0.9201
+
+Model Evaluation:
+Priority Classification Report:
+              precision    recall  f1-score   support
+
+         Low       0.77      0.80      0.78     45410
+      Medium       0.76      0.65      0.70     47267
+        High       0.66      0.96      0.78     11949
+
+    accuracy                           0.75    104626
+   macro avg       0.73      0.80      0.76    104626
+weighted avg       0.75      0.75      0.74    104626
+
+Number of misclassified samples: 26387
+
+Feature Importance Ranking:
+urgent_content: 0.2388
+caps_word_count: 0.1899
+time_indicator_count: 0.1699
+exclamation_count: 0.0675
+urgent_subject: 0.0653
+sentiment_neg: 0.0540
+text_length: 0.0482
+sentiment_ratio: 0.0301
+sentiment_neu: 0.0082
+subject_sentiment: 0.0069
+subject_length: 0.0067
+sentiment_pos: 0.0053
+question_count: 0.0026
+
+Model saved to data\priority_model.pkl

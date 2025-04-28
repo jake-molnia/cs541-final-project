@@ -4,9 +4,12 @@ import pandas as pd
 import pickle
 import nltk
 from nltk.sentiment import SentimentIntensityAnalyzer
+from sklearn.metrics import classification_report, confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 # Download NLTK data if needed
-nltk.download('vader_lexicon')
+nltk.download('vader_lexicon', quiet=True)
 
 def load_model_and_dependencies(data_dir):
     """Load the trained model and necessary dependencies"""
@@ -14,85 +17,98 @@ def load_model_and_dependencies(data_dir):
     with open(os.path.join(data_dir, 'priority_model.pkl'), 'rb') as f:
         model = pickle.load(f)
     
-    return model
+    # Load test data
+    X_test_features = np.load(os.path.join(data_dir, 'X_features.npy'), allow_pickle=True)
+    y_test_priority = np.load(os.path.join(data_dir, 'y_priority.npy'), allow_pickle=True)
+    feature_df = pd.read_csv(os.path.join(data_dir, 'email_features.csv'))
+    
+    # Get test set indices - assuming we're using the same train/test split from script 02
+    from sklearn.model_selection import train_test_split
+    _, X_test_indices = train_test_split(
+        np.arange(len(y_test_priority)), 
+        test_size=0.2, 
+        random_state=42, 
+        stratify=y_test_priority
+    )
+    
+    # Extract test set
+    X_test = X_test_features[X_test_indices]
+    y_test = y_test_priority[X_test_indices]
+    
+    # Extract corresponding email content and subjects for test set
+    test_df = feature_df.iloc[X_test_indices]
+    
+    return model, X_test, y_test, test_df
 
-def extract_email_features(email_content, email_subject=""):
-    """Extract features from a single email"""
-    # Initialize sentiment analyzer
-    sia = SentimentIntensityAnalyzer()
+def evaluate_model(model, X_test, y_test):
+    """Evaluate model on test data"""
+    # Get predictions
+    y_pred = model.predict(X_test)
     
-    # Get sentiment scores
-    sentiment_scores = sia.polarity_scores(email_content)
-    subject_sentiment = sia.polarity_scores(email_subject)
+    # Calculate and print metrics
+    print("\nModel Evaluation on Test Data:")
+    print("Priority Classification Report:")
+    print(classification_report(y_test, y_pred, 
+                                target_names=['Low', 'Medium', 'High']))
     
-    # Define urgency keywords
-    urgency_keywords = ['urgent', 'immediately', 'asap', 'deadline', 'important', 
-                        'critical', 'priority', 'attention', 'emergency', 'quick',
-                        'soon', 'today', 'tomorrow', 'needed', 'required', 'fast']
+    # Create confusion matrix
+    cm = confusion_matrix(y_test, y_pred)
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=['Low', 'Medium', 'High'],
+                yticklabels=['Low', 'Medium', 'High'])
+    plt.xlabel('Predicted')
+    plt.ylabel('True')
+    plt.title('Confusion Matrix')
+    plt.savefig('data/test_confusion_matrix.png')
     
-    # Check for urgency indicators
-    urgent_subject = any(keyword in email_subject.lower() for keyword in urgency_keywords)
-    urgent_content = any(keyword in email_content.lower() for keyword in urgency_keywords)
-    exclamation_count = email_content.count('!')
-    question_count = email_content.count('?')
-    caps_word_count = sum(1 for word in email_content.split() if word.isupper() and len(word) > 2)
-    
-    # Count time indicators
-    time_indicators = ['today', 'tomorrow', 'tonight', 'morning', 'afternoon', 'evening',
-                       'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'asap']
-    time_indicator_count = sum(email_content.lower().count(indicator) for indicator in time_indicators)
-    
-    # Create feature vector
-    features = np.array([
-        sentiment_scores['neg'],
-        sentiment_scores['neu'],
-        sentiment_scores['pos'],
-        sentiment_scores['compound'],
-        subject_sentiment['compound'],
-        int(urgent_subject),
-        int(urgent_content),
-        exclamation_count,
-        question_count,
-        caps_word_count,
-        time_indicator_count
-    ]).reshape(1, -1)  # Reshape for single prediction
-    
-    return features
+    return y_pred
 
-def predict_priority(model, features):
-    """Predict priority level for an email"""
-    priority_level = model.predict(features)[0]
-    priority_probs = model.predict_proba(features)[0]
-    
+def show_example_predictions(model, test_df, y_test, y_pred, num_examples=5):
+    """Show example predictions from the test set"""
     priority_names = ['Low', 'Medium', 'High']
-    priority_name = priority_names[priority_level]
     
-    return priority_level, priority_name, priority_probs
-
-def display_results(priority_level, priority_name, priority_probs):
-    """Display prediction results"""
-    print(f"\nPredicted Priority: {priority_name} (Level {priority_level})")
-    print(f"Confidence scores: Low: {priority_probs[0]:.2f}, "
-          f"Medium: {priority_probs[1]:.2f}, High: {priority_probs[2]:.2f}")
+    # Get indices of correct and incorrect predictions
+    correct_indices = np.where(y_test == y_pred)[0]
+    incorrect_indices = np.where(y_test != y_pred)[0]
+    
+    print("\n--- CORRECTLY CLASSIFIED EXAMPLES ---")
+    for i in range(min(num_examples, len(correct_indices))):
+        idx = correct_indices[i]
+        print(f"\nExample {i+1}:")
+        print(f"Subject: {test_df.iloc[idx]['subject']}")
+        print(f"Content excerpt: {test_df.iloc[idx]['content'][:100]}...")
+        print(f"True Priority: {priority_names[y_test[idx]]}")
+        print(f"Predicted Priority: {priority_names[y_pred[idx]]}")
+        print("-" * 50)
+    
+    print("\n--- MISCLASSIFIED EXAMPLES ---")
+    for i in range(min(num_examples, len(incorrect_indices))):
+        idx = incorrect_indices[i]
+        print(f"\nExample {i+1}:")
+        print(f"Subject: {test_df.iloc[idx]['subject']}")
+        print(f"Content excerpt: {test_df.iloc[idx]['content'][:100]}...")
+        print(f"True Priority: {priority_names[y_test[idx]]}")
+        print(f"Predicted Priority: {priority_names[y_pred[idx]]}")
+        print("-" * 50)
 
 def main():
-    """Main function for email priority prediction"""
+    """Main function for testing email priority model against test data"""
     data_dir = "data"
-    model = load_model_and_dependencies(data_dir)
     
-    print("Email Priority Prediction")
-    print("------------------------")
-    print("Enter 'q' to quit when prompted for the subject")
+    print("Email Priority Prediction - Test Evaluation")
+    print("------------------------------------------")
     
-    while True:
-        email_subject = input("\nEnter email subject: ")
-        if email_subject.lower() == 'q':
-            break
-            
-        email_content = input("Enter email content: ")
-        features = extract_email_features(email_content, email_subject)
-        priority_level, priority_name, priority_probs = predict_priority(model, features)
-        display_results(priority_level, priority_name, priority_probs)
+    # Load model and test data
+    model, X_test, y_test, test_df = load_model_and_dependencies(data_dir)
+    
+    # Evaluate model on test data
+    y_pred = evaluate_model(model, X_test, y_test)
+    
+    # Show example predictions
+    show_example_predictions(model, test_df, y_test, y_pred)
+    
+    print("\nTest evaluation complete!")
 
 if __name__ == "__main__":
     main()
