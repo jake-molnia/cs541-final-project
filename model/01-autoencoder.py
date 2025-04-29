@@ -10,7 +10,7 @@ from tinygrad import Device
 import wandb
 
 # Hyperparameters
-BATCH_SIZE: int = 6400
+BATCH_SIZE: int = 64
 EPOCHS: int = 10
 LEARNING_RATE: float = 0.001
 EMBEDDING_DIM: int = 100
@@ -226,7 +226,7 @@ def save_model(model: CNNAutoencoder, save_path: str) -> None:
 
 def main() -> None:
     print(f"Using device: {Device.DEFAULT}")
-    data_dir: str = "scratch/data"
+    data_dir: str = "data"
     X_train, X_test, y_train, y_test, vocab_size, max_sequence_length = load_data(data_dir)
     model: CNNAutoencoder = CNNAutoencoder(
         vocab_size=vocab_size,
@@ -235,9 +235,11 @@ def main() -> None:
         cnn_kernel_sizes=CNN_KERNEL_SIZES,
         latent_dims=LATENT_DIMS
     )
+    train_indices = np.random.choice(len(X_train), int(0.1 * len(X_train)), replace=False)
+    X_train_subset = X_train[train_indices]
     model = train(
         model=model,
-        X_train=X_train,
+        X_train=X_train_subset,
         X_test=X_test,
         batch_size=BATCH_SIZE,
         epochs=EPOCHS,
