@@ -226,7 +226,7 @@ def save_model(model: CNNAutoencoder, save_path: str) -> None:
 
 def main() -> None:
     print(f"Using device: {Device.DEFAULT}")
-    data_dir: str = "data"
+    data_dir: str = "scratch/data"
     X_train, X_test, y_train, y_test, vocab_size, max_sequence_length = load_data(data_dir)
     model: CNNAutoencoder = CNNAutoencoder(
         vocab_size=vocab_size,

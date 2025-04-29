@@ -80,7 +80,7 @@ def main():
     print("Starting Enron email dataset processing")
 
     setup_kaggle_credentials()
-    data_dir = os.path.join(os.getcwd(), "data")
+    data_dir = os.path.join(os.getcwd(), "scratch", "data")
     spam_csv_path = os.path.join(data_dir, "spam_emails.csv")
     enron_csv_path = os.path.join(data_dir, "enron_emails.csv")
     if not os.path.exists(data_dir):
