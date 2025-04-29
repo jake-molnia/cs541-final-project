@@ -122,14 +122,38 @@ def save_model(model, data_dir):
         pickle.dump(model, f)
     print(f"\nModel saved to {os.path.join(data_dir, 'priority_model.pkl')}")
 
+import matplotlib.pyplot as plt
+
+def visualize_priority_distribution(y_train, y_test):
+    """Visualizes the number of low, medium, and high priority emails"""
+    categories = ["Low", "Medium", "High"]
+    train_counts = [sum(y_train == i) for i in range(3)]
+    test_counts = [sum(y_test == i) for i in range(3)]
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    
+    ax.bar(categories, train_counts, label="Train Set", alpha=0.7, color="blue")
+    ax.bar(categories, test_counts, label="Test Set", alpha=0.7, color="orange")
+
+    ax.set_xlabel("Priority Level")
+    ax.set_ylabel("Number of Emails")
+    ax.set_title("Email Priority Distribution in Train & Test Sets")
+    ax.legend()
+    
+    plt.savefig("data/priority_distribution.png")
+    print("\nPriority distribution visualization saved as 'data/priority_distribution.png'")
+
 def main():
-    """Main function to train the priority model"""
+    """Main function to train the priority model and visualize priority distribution"""
     data_dir = "data"
     
-    # Load feature data with pre-defined splits
+    # Load feature data
     print("Loading feature data...")
     X_train, X_test, y_train, y_test, feature_names, feature_df = load_feature_data(data_dir)
-    
+
+    # Visualize priority distribution
+    visualize_priority_distribution(y_train, y_test)
+
     # Train model
     model = train_priority_model(X_train, y_train)
     
