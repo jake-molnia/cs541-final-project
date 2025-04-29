@@ -1,4 +1,5 @@
 import os
+from re import S
 import numpy as np
 import pickle
 from typing import Tuple, List, Dict, Any, Optional
@@ -8,6 +9,7 @@ from tinygrad.nn import Linear, Embedding, Conv1d, Conv2d
 from tinygrad.nn.optim import AdamW
 from tinygrad import Device
 import wandb
+import time
 
 # Hyperparameters
 BATCH_SIZE: int = 64
@@ -115,26 +117,42 @@ def train(model: CNNAutoencoder, X_train: np.ndarray, X_test: np.ndarray,
     train_losses, val_losses = [], []
     epochs_plot = []
 
-    wandb.init(project="tinygrad-email-autoencoder", config={
-        "learning_rate": learning_rate,
-        "epochs": epochs,
-        "batch_size": batch_size,
-        "weight_decay": weight_decay,
-        "embedding_dim": EMBEDDING_DIM,
-        "cnn_filters": CNN_FILTERS,
-        "cnn_kernel_sizes": CNN_KERNEL_SIZES,
-        "latent_dims": LATENT_DIMS,
-        "dropout_rate": DROPOUT_RATE,
-    })
+    wandb.init(project="tinygrad-email-autoencoder",
+        config={
+            "learning_rate": learning_rate,
+            "epochs": epochs,
+            "batch_size": batch_size,
+            "weight_decay": weight_decay,
+            "embedding_dim": EMBEDDING_DIM,
+            "cnn_filters": CNN_FILTERS,
+            "cnn_kernel_sizes": CNN_KERNEL_SIZES,
+            "latent_dims": LATENT_DIMS,
+            "dropout_rate": DROPOUT_RATE,
+            "device": Device.DEFAULT,
+            "dataset_size": len(X_train),
+            "test_size": len(X_test),
+            "vocab_size": model.embedding.weight.shape[0],
+            "max_sequence_length": X_train.shape[1]
+        },
+        name=f"run-bs{batch_size}-lr{learning_rate}-wd{weight_decay}",
+        tags=["autoencoder", "cnn", "tinygrad"])
+    batch_table = wandb.Table(columns=["epoch", "batch", "loss", "time"])
+    start_time = time.time()
+    epoch_start_time = start_time
+    batch_start_time = start_time
 
     Tensor.training = True
     optimizer: AdamW = AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     n_batches: int = int(np.floor(0.1 * len(X_train)) // batch_size)
+    total_batches = epochs * n_batches
 
-    # For tracking batch-level progress in current epoch
+    global_step = 0
     batch_losses = []
+    running_loss = 0.0
+    custom_x = []
 
     for epoch in range(epochs):
+        epoch_start_time = time.time()
         total_loss: float = 0.0
         batch_losses = []  # Reset for new epoch
 
@@ -142,6 +160,8 @@ def train(model: CNNAutoencoder, X_train: np.ndarray, X_test: np.ndarray,
         X_train_shuffled: np.ndarray = X_train[indices]
 
         for i in range(n_batches):
+            batch_start_time = time.time()
+            global_step += 1
             start_idx: int = i * batch_size
             end_idx: int = start_idx + batch_size
             x_batch: np.ndarray = X_train_shuffled[start_idx:end_idx]
@@ -155,32 +175,70 @@ def train(model: CNNAutoencoder, X_train: np.ndarray, X_test: np.ndarray,
             optimizer.step()
 
             batch_loss = loss.detach().numpy()
+            batch_time = time.time() - batch_start_time
             total_loss += batch_loss
             batch_losses.append(batch_loss)
+            running_loss += batch_loss
+            custom_x.append(global_step / total_batches)  # Normalized position
+            wandb.log({
+                "batch": global_step,
+                "batch_loss": batch_loss,
+                "batch_time": batch_time,
+                "epoch": epoch,
+                "progress": global_step / total_batches,
+                "learning_rate": learning_rate,
+                "estimated_time_remaining": (time.time() - start_time) / global_step * (total_batches - global_step)
+            }, step=global_step)
+            batch_table.add_data(epoch, i, batch_loss, batch_time)
 
-            # Update batch progress plot every 5 batches
-            if i % 5 == 0 and i > 0:
+            if i % 5 == 0 or i == n_batches - 1:
+                avg_running_loss = running_loss / min(5, i+1)
+                running_loss = 0.0
+
                 ax2.clear()
                 ax2.plot(range(len(batch_losses)), batch_losses, 'b-')
-                ax2.set_title(f'Epoch {epoch+1} Batch Losses')
+                ax2.set_title(f'Epoch {epoch+1}/{epochs}, Batch Losses')
                 ax2.set_xlabel('Batch')
                 ax2.set_ylabel('Loss')
                 plt.tight_layout()
                 plt.pause(0.01)  # Brief pause to update the plot
 
+                wandb.log({
+                    "smoothed_batch_loss": avg_running_loss,
+                    "batch_time_moving_avg": batch_time  # Can be improved with actual moving avg
+                }, step=global_step)
+
+                if i % 10 == 0:  # Reduce frequency of image logging to avoid WandB overhead
+                    plt.figure(figsize=(10, 4))
+                    plt.plot(range(len(batch_losses)), batch_losses, 'b-', label='Batch Loss')
+                    plt.title(f'Epoch {epoch+1}, Batch Losses')
+                    plt.xlabel('Batch')
+                    plt.ylabel('Loss')
+                    plt.legend()
+                    plt.tight_layout()
+                    wandb.log({"batch_loss_plot": wandb.Image(plt)}, step=global_step)
+                    plt.close()
+
         avg_loss: float = total_loss / n_batches
+        epoch_time = time.time() - epoch_start_time
         train_losses.append(avg_loss)
         epochs_plot.append(epoch)
 
-        print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}")
-        wandb.log({"epoch": epoch, "train_loss": avg_loss})
+        print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}, Time: {epoch_time:.2f}s")
+        wandb.log({
+            "epoch": epoch,
+            "train_loss": avg_loss,
+            "epoch_time": epoch_time,
+            "time_elapsed": time.time() - start_time
+        }, step=global_step)
 
-        # Do validation every epoch (changed from every 2 epochs for better visualization)
         val_indices: np.ndarray = np.random.choice(len(X_test), min(1000, len(X_test)), replace=False)
         X_val: np.ndarray = X_test[val_indices]
         val_batches: int = max(1, len(X_val) // batch_size)
         val_loss: float = 0.0
+        val_batch_losses = []
 
+        val_start_time = time.time()
         for i in range(val_batches):
             start_idx = i * batch_size
             end_idx = min(start_idx + batch_size, len(X_val))
@@ -191,12 +249,39 @@ def train(model: CNNAutoencoder, X_train: np.ndarray, X_test: np.ndarray,
                 encoded, decoded, features = model.forward(x_tensor)
                 batch_loss: float = ((features - decoded) ** 2).mean().numpy()
             val_loss += batch_loss
+            val_batch_losses.append(batch_loss)
 
         avg_val_loss: float = val_loss / val_batches
+        val_time = time.time() - val_start_time
         val_losses.append(avg_val_loss)
 
-        print(f"Validation Loss: {avg_val_loss:.4f}")
-        wandb.log({"epoch": epoch, "val_loss": avg_val_loss})
+        print(f"Validation Loss: {avg_val_loss:.4f}, Time: {val_time:.2f}s")
+        wandb.log({
+            "val_loss": avg_val_loss,
+            "val_time": val_time,
+            "val_batch_losses": wandb.Histogram(val_batch_losses)
+        }, step=global_step)
+
+        if epoch % 2 == 0 or epoch == epochs - 1:
+            grad_norms = []
+            weight_norms = []
+            for j, param in enumerate(model.parameters()):
+                if param.grad is not None:
+                    grad_norm = np.linalg.norm(param.grad.numpy())
+                    grad_norms.append(grad_norm)
+                    wandb.log({f"grad_norm/layer_{j}": grad_norm}, step=global_step)
+
+                weight_norm = np.linalg.norm(param.numpy())
+                weight_norms.append(weight_norm)
+                wandb.log({f"weight_norm/layer_{j}": weight_norm}, step=global_step)
+
+            wandb.log({
+                "grad_norms": wandb.Histogram(grad_norms),
+                "weight_norms": wandb.Histogram(weight_norms),
+                "max_grad": max(grad_norms) if grad_norms else 0,
+                "min_grad": min(grad_norms) if grad_norms else 0,
+                "avg_grad": sum(grad_norms) / len(grad_norms) if grad_norms else 0
+            }, step=global_step)
 
         # Update the training/validation loss plot
         ax1.clear()
@@ -209,8 +294,52 @@ def train(model: CNNAutoencoder, X_train: np.ndarray, X_test: np.ndarray,
         plt.tight_layout()
         plt.pause(0.1)  # Pause to update the plot
 
+        if epoch % 2 == 0 or epoch == epochs - 1:
+            checkpoint_path = f"checkpoints/epoch_{epoch}.npz"
+            os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
+            save_model(model, checkpoint_path)
+            checkpoint_artifact = wandb.Artifact(f"model-checkpoint-epoch-{epoch}", type="model")
+            checkpoint_artifact.add_file(checkpoint_path)
+            wandb.log_artifact(checkpoint_artifact)
+
+        plt.figure(figsize=(10, 6))
+        plt.plot(epochs_plot, train_losses, 'b-', label='Training Loss')
+        plt.plot(epochs_plot, val_losses, 'r-', label='Validation Loss')
+        plt.title('Training and Validation Loss')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.legend()
+        plt.grid(True)
+        wandb.log({"loss_plot": wandb.Image(plt)}, step=global_step)
+        plt.close()
+
+    total_time = time.time() - start_time
+    print(f"Training completed in {total_time:.2f} seconds")
+
+    wandb.log({"batch_metrics": batch_table})
+
     # Save final plot
+    plt.figure(figsize=(12, 6))
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs_plot, train_losses, 'b-', label='Training Loss')
+    plt.plot(epochs_plot, val_losses, 'r-', label='Validation Loss')
+    plt.title('Training and Validation Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.grid(True)
+
+    plt.subplot(1, 2, 2)
+    plt.plot(range(len(batch_losses)), batch_losses, 'g-')
+    plt.title('Final Epoch Batch Losses')
+    plt.xlabel('Batch')
+    plt.ylabel('Loss')
+    plt.grid(True)
+
+    plt.tight_layout()
     plt.savefig('training_progress.png')
+    wandb.log({"final_plot": wandb.Image('training_progress.png')})
+
     plt.ioff()  # Turn off interactive mode
     plt.close()
 
@@ -226,6 +355,9 @@ def save_model(model: CNNAutoencoder, save_path: str) -> None:
 
 def main() -> None:
     print(f"Using device: {Device.DEFAULT}")
+    os.makedirs("data", exist_ok=True)
+    os.makedirs("checkpoints", exist_ok=True)
+
     data_dir: str = "data"
     X_train, X_test, y_train, y_test, vocab_size, max_sequence_length = load_data(data_dir)
     model: CNNAutoencoder = CNNAutoencoder(
