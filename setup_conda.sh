@@ -3,6 +3,7 @@ set -euo pipefail
 
 echo "=== LLM Training Environment Setup ==="
 
+module load cudnn8.9-cuda12.3/8.9.7.29
 echo "Installing uv package manager..."
 curl -fsSL https://github.com/astral-sh/uv/releases/latest/download/uv-installer.sh | bash
 export PATH="$HOME/.local/bin:$PATH"
