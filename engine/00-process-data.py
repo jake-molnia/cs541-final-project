@@ -162,7 +162,7 @@ def save_preprocessed_data(data_dir: str, X_train: Any, X_test: Any,
 
 def main() -> None:
     """Main function to execute the email preprocessing pipeline."""
-    data_dir = "data"
+    data_dir = os.path.join("scratch", "data")
 
     ###############################Parameters#################################
     max_words = 10000  # Dictionary size
