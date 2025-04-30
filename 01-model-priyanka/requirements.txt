@@ -4,3 +4,4 @@ transformers
 datasets
 scikit-learn
 accelerate
+kaggle
