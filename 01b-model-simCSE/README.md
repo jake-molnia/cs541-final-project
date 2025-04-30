@@ -19,6 +19,15 @@ Then you can
 cd cs541-final-project/01b-model-simCSE
 ```
 
+We need to login to wandb here so
+
+```
+chmod +x 00a_setup.sh
+wandb login
+```
+
+Use the api key I sent you!
+
 And add the two slurm jobs
 
 ```
