@@ -1,0 +1,44 @@
+{
+  "os": "macOS-15.3.1-arm64-arm-64bit",
+  "python": "CPython 3.12.9",
+  "startedAt": "2025-04-30T16:20:47.740879Z",
+  "program": "/Users/jake/Developer/git-repos/cs541-final-project/01b-model-simCSE/01a-train.py",
+  "codePath": "01b-model-simCSE/01a-train.py",
+  "git": {
+    "remote": "https://github.com/jake-molnia/cs541-final-project.git",
+    "commit": "3be6a599b9233209a0119312bda56f8920de0350"
+  },
+  "email": "jacob@molnia.net",
+  "root": "/Users/jake/Developer/git-repos/cs541-final-project/01b-model-simCSE",
+  "host": "vpnclient-10-217-64-172.int.wpi.edu",
+  "executable": "/Users/jake/Developer/git-repos/cs541-final-project/01b-model-simCSE/.venv/bin/python3",
+  "codePathLocal": "01a-train.py",
+  "cpu_count": 14,
+  "cpu_count_logical": 14,
+  "disk": {
+    "/": {
+      "total": "994662584320",
+      "used": "864475803648"
+    },
+    "/System/Volumes/Data": {
+      "total": "994662584320",
+      "used": "864475803648"
+    }
+  },
+  "memory": {
+    "total": "25769803776"
+  },
+  "cpu": {
+    "count": 14,
+    "countLogical": 14
+  },
+  "apple": {
+    "name": "Apple M4 Pro",
+    "ecpuCores": 4,
+    "pcpuCores": 10,
+    "gpuCores": 20,
+    "memoryGb": 24,
+    "swapTotalBytes": "3221225472",
+    "ramTotalBytes": "25769803776"
+  }
+}
