@@ -52,29 +52,20 @@ class CNNAutoencoder:
     def __init__(self, vocab_size: int, embedding_dim: int,
                  cnn_filters: List[int], cnn_kernel_sizes: List[int],
                  latent_dims: List[int]) -> None:
-        # Embedding layer
         self.embedding = Embedding(vocab_size, embedding_dim)
 
-        # Multiple CNN layers
         self.convs = []
         in_channels = embedding_dim
         for i, (filters, kernel_size) in enumerate(zip(cnn_filters, cnn_kernel_sizes)):
-            self.convs.append(Conv1d(
-                in_channels=in_channels,
-                out_channels=filters,
-                kernel_size=kernel_size,
-                stride=1,
-                padding=kernel_size // 2))
+            self.convs.append(Conv1d(in_channels, filters, kernel_size, padding=kernel_size // 2))
             in_channels = filters
 
         self.encoders = []
         self.decoders = []
         encoder_input_dim = cnn_filters[-1]
-        # Add encoder layers
         for latent_dim in latent_dims:
             self.encoders.append(Linear(encoder_input_dim, latent_dim))
             encoder_input_dim = latent_dim
-        # Add decoder layers
         decoder_input_dim = latent_dims[-1]
         for i in range(len(latent_dims)-1, 0, -1):
             self.decoders.append(Linear(decoder_input_dim, latent_dims[i-1]))
@@ -82,14 +73,26 @@ class CNNAutoencoder:
         self.decoders.append(Linear(decoder_input_dim, cnn_filters[-1]))
 
     def forward(self, x: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
-        x = self.embedding(x)  # (batch_size, sequence_length, embedding_dim)
+        x = self.embedding(x)
         x = x.permute(0, 2, 1)
+
         for conv in self.convs:
             x = conv(x).relu()
-        features = x.max(axis=2)  # (batch_size, cnn_filters[-1])
-        encoded = features
+        features = x.max(axis=2)
+
+        if Tensor.training:
+            noise = Tensor.randn(*features.shape) * 0.1
+            noisy_features = features + noise
+        else:
+            noisy_features = features
+
+        encoded = noisy_features
         for encoder in self.encoders:
             encoded = encoder(encoded).relu()
+            if Tensor.training:
+                encoded = Tensor.dropout(encoded, DROPOUT_RATE)
+
+        # Decode
         decoded = encoded
         for decoder in self.decoders:
             decoded = decoder(decoded).relu()
@@ -104,9 +107,8 @@ class CNNAutoencoder:
             params.extend([encoder.weight, encoder.bias])
         for decoder in self.decoders:
             params.extend([decoder.weight, decoder.bias])
-
+        params.extend([self.final_decoder.weight, self.final_decoder.bias])
         return params
-
 
 def train(model: CNNAutoencoder, X_train: np.ndarray, X_test: np.ndarray,
          batch_size: int, epochs: int, learning_rate: float, weight_decay: float) -> CNNAutoencoder:
@@ -132,7 +134,6 @@ def train(model: CNNAutoencoder, X_train: np.ndarray, X_test: np.ndarray,
             "dataset_size": len(X_train),
             "test_size": len(X_test),
             "vocab_size": model.embedding.weight.shape[0],
-            "max_sequence_length": X_train.shape[1]
         },
         name=f"run-bs{batch_size}-lr{learning_rate}-wd{weight_decay}",
         tags=["autoencoder", "cnn", "tinygrad"])
@@ -168,7 +169,9 @@ def train(model: CNNAutoencoder, X_train: np.ndarray, X_test: np.ndarray,
             x_tensor: Tensor = Tensor(x_batch)
 
             encoded, decoded, features = model.forward(x_tensor)
-            loss: Tensor = ((features - decoded) ** 2).mean()
+            reconstruction_loss = ((features - decoded) ** 2).mean()
+            regularization_loss = 0.01 * (encoded ** 2).mean()  # Encourages small values
+            loss = reconstruction_loss + regularization_loss
 
             optimizer.zero_grad()
             loss.backward()
@@ -182,7 +185,9 @@ def train(model: CNNAutoencoder, X_train: np.ndarray, X_test: np.ndarray,
             custom_x.append(global_step / total_batches)  # Normalized position
             wandb.log({
                 "batch": global_step,
-                "batch_loss": batch_loss,
+                "reconstruction_loss": reconstruction_loss.detach().numpy(),
+                "regularization_loss": regularization_loss.detach().numpy(),
+                "total_loss": loss.detach().numpy(),
                 "batch_time": batch_time,
                 "epoch": epoch,
                 "progress": global_step / total_batches,
@@ -365,7 +370,7 @@ def main() -> None:
         embedding_dim=EMBEDDING_DIM,
         cnn_filters=CNN_FILTERS,
         cnn_kernel_sizes=CNN_KERNEL_SIZES,
-        latent_dims=LATENT_DIMS
+        latent_dims=LATENT_DIMS,
     )
     train_indices = np.random.choice(len(X_train), int(0.1 * len(X_train)), replace=False)
     X_train_subset = X_train[train_indices]
