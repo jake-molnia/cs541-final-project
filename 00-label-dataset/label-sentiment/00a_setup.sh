@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 
+export UV_LINK_MODE=copy
 module load cudnn8.9-cuda12.3/8.9.7.29
 
 echo "=== Installing uv package manager ==="

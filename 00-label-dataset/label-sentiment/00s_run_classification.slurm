@@ -21,7 +21,7 @@ module purge
 module load cudnn8.9-cuda12.3/8.9.7.29
 
 # Navigate to the project directory
-cd $HOME/scratch/01-label-data
+cd $HOME/scratch/cs541-final-project/00-label-dataset/label-sentiment/
 
 # Set up Python environment using uv (which is in the current directory)
 echo "Setting up UV environment..."
@@ -38,6 +38,6 @@ source .venv/bin/activate
 
 # Run the script
 echo "Starting classification script..."
-python label_sentiment.py
+python 01_label_sentiment.py
 
 echo "Job completed at $(date)"
