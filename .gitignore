@@ -174,5 +174,7 @@ cython_debug/
 .pypirc
 
 /data/*
+*/data/*
 .kaggle
 .DS_Store
+/wandb
