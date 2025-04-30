@@ -17,8 +17,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-INPUT_CSV = os.path.expanduser("./emails.csv")
-OUTPUT_CSV = os.path.expanduser("./enron_tagged.csv")
+INPUT_CSV = os.path.expanduser("./data/emails.csv")
+OUTPUT_CSV = os.path.expanduser("./data/enron_tagged.csv")
 BATCH_SIZE = 256  # Optimized for A30 GPU memory (24GB)
 
 def load_data(csv_path):
@@ -63,7 +63,11 @@ def main():
         torch.backends.cuda.matmul.allow_tf32 = True  # Enable TF32 when available
 
     classifier = setup_model()
-    candidate_labels = ["urgent", "non-urgent"]
+    candidate_labels = ["very negative", "moderately negative", "negative",
+                        "neutral", "positive", "moderately positive", "very positive"]
+
+    emotion_mapping = {'very negative': -1, 'moderately negative': -0.5, 'negative': -0.25,
+                      'neutral': 0, 'positive': 0.25, 'moderately positive': 0.5, 'very positive': 1}
     df = load_data(INPUT_CSV)
     logger.info(f"Loaded {len(df)} records")
     predictions = []
@@ -82,8 +86,9 @@ def main():
         predictions.extend(batch_labels)
         scores.extend(batch_scores)
 
-    df['predicted_label'] = predictions
-    df['score'] = scores
+    df['predicted_emotion'] = predictions
+    df['emotion_score'] = df['predicted_emotion'].map(emotion_mapping)  # Map text labels to numerical scores
+    df['confidence'] = scores
     logger.info(f"Classification complete, saving results")
     df.to_csv(OUTPUT_CSV, index=False)
     logger.info(f"Saved to {OUTPUT_CSV}")
